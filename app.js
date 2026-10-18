@@ -1,69 +1,17 @@
+import { REGIONES, ETIQUETAS, SERVIDORES, LIMITE_FILAS } from "./config.js";
+import { uniq, tipoPhoneES, dupPhones, dupTxt, testVal, validarNumero as validarNumeroTelefonico } from "./telefonos.js";
 const $ = (s) => document.querySelector(s),
   A = (t, h) => {
     const e = document.createElement(t);
     h && (e.innerHTML = h);
     return e;
-  },
-  Z = {
-    Andalucía: 349044,
-    Aragón: 349045,
-    Asturias: 349033,
-    "Islas Baleares": 348981,
-    Canarias: 349048,
-    Cantabria: 349013,
-    "Castilla-La Mancha": 349052,
-    "Castilla y León": 349041,
-    Cataluña: 349053,
-    Extremadura: 349050,
-    Galicia: 349036,
-    Madrid: 349055,
-    Murcia: 349047,
-    Navarra: 349027,
-    "La Rioja": 348991,
-    "País Vasco": 349042,
-    "Comunidad Valenciana": 349043,
-    Ceuta: 1154756,
-    Melilla: 1154757,
-    España: 1311341
-  },
-  T = [
-    ["phone", "fixed"],
-    ["phone:ES", "special"],
-    ["contact:phone", "fixed"],
-    ["mobile", "mobile"],
-    ["contact:mobile", "mobile"],
-    ["phone:mobile", "mobile"],
-    ["emergency:phone", "any"],
-    ["fax", "fixed"],
-    ["contact:fax", "fixed"],
-    ["whatsapp", "any"],
-    ["contact:whatsapp", "any"]
-  ],
-  EXC = [
-    ["mobile", "contact:whatsapp"],
-    ["mobile", "emergency:phone"],
-    ["phone", "emergency:phone"],
-    ["phone:mobile", "contact:whatsapp"],
-    ["phone", "contact:fax"],
-    ["phone", "fax"],
-    ["contact:mobile", "contact:whatsapp"],
-    ["contact:phone", "contact:whatsapp"],
-    ["phone", "contact:whatsapp"],
-    ["contact:phone", "contact:fax"],
-    ["contact:phone", "fax"]
-  ],
-  SERV = {
-    postpass: "https://postpass.geofabrik.de/api/interpreter",
-    de: "https://overpass-api.de/api/interpreter",
-    ru: "https://maps.mail.ru/osm/tools/overpass/api/interpreter"
-  },
-  ROW_WARN = 5e4;
-Object.entries(Z).forEach(([k, v]) => {
+  };
+Object.entries(REGIONES).forEach(([k, v]) => {
   const o = A("option", k);
   o.value = v;
   $("#region").append(o);
 });
-T.forEach(([k, x]) => {
+ETIQUETAS.forEach(([k, x]) => {
   const o = A("option", k);
   o.dataset.expect = x;
   $("#tag").append(o);
@@ -80,23 +28,7 @@ let modoPersonalizado = 0,
   itemsById = new Map(),
   popupById = new Map(),
   openGroups = new Set();
-const conf = {
-    prefijo: "+34",
-    noValido: /[^0-9+ ;]|[\u00A0\u2000-\u200B\u202F\u205F\u3000\t\r\n]/,
-    noValidoG: /[^0-9+ ;]|[\u00A0\u2000-\u200B\u202F\u205F\u3000\t\r\n]/g
-  },
-  special = new Set([
-    "VOIP",
-    "TOLL_FREE",
-    "PREMIUM_RATE",
-    "SHARED_COST",
-    "PAGER",
-    "UAN",
-    "PERSONAL_NUMBER",
-    "VOICEMAIL"
-  ]),
-  uniq = (a) => [...new Set(a.filter(Boolean))],
-  osmKey = (x) => x.type + "/" + x.id,
+const osmKey = (x) => x.type + "/" + x.id,
   sid = (x) => ({ node: "n", way: "w", relation: "r" }[x.type] + x.id),
   esc = (s) =>
     String(s ?? "").replace(
@@ -105,7 +37,7 @@ const conf = {
     ),
   tagActivo = () =>
     modoPersonalizado ? $("#customKey").value.trim() : $("#tag").value,
-  server = () => SERV[$("#server").value] || SERV.postpass,
+  server = () => SERVIDORES[$("#server").value] || SERVIDORES.postpass,
   chunk = (a, n) =>
     Array.from({ length: Math.ceil(a.length / n) }, (_, i) =>
       a.slice(i * n, i * n + n)
@@ -130,109 +62,7 @@ const clip = (t) =>
       "https://overpass-turbo.eu/?Q=" + encodeURIComponent(q),
       "_blank",
       "noopener"
-    ),
-  isUrl = (s) =>
-    /^(https?:\/\/)?([\w-]+\.)+[a-z]{2,}\//i.test(String(s || "").trim());
-const wNum = (s) => {
-  let u = String(s || "").trim(),
-    m;
-  try {
-    const x = new URL(/^https?:\/\//i.test(u) ? u : "https://" + u),
-      h = x.hostname.replace(/^www\./, "").toLowerCase(),
-      p = x.pathname;
-    if (/(^|\.)wa\.me$/.test(h) && (m = p.match(/^\/(\d{8,15})(?:\/|$)/)))
-      return m[1];
-    if (/(^|\.)whatsapp\.com$/.test(h) || /(^|\.)api\.whatsapp\.com$/.test(h)) {
-      if ((m = x.searchParams.get("phone"))) return m;
-      if ((m = p.match(/^\/catalog\/(\d{8,15})(?:\/|$)/))) return m[1];
-    }
-  } catch {}
-  return null;
-};
-const parseES = (s) => {
-    try {
-      let t = String(s || "")
-        .trim()
-        .replace(/[()\-\s]/g, "");
-      if (!t) return null;
-      t = wNum(t) || t;
-      t = !t.startsWith("+")
-        ? t.startsWith("0034")
-          ? "+" + t.slice(2)
-          : t.startsWith("34")
-          ? "+" + t
-          : conf.prefijo + t
-        : t;
-      const p = libphonenumber.parsePhoneNumber(t, "ES");
-      return p?.isValid() && p.country === "ES" ? p : null;
-    } catch {
-      return null;
-    }
-  },
-  phoneESShort = new Set(["010", "061"]),
-  tipoPhoneES = (n) => phoneESShort.has(n.trim()) ? "SHORT_CODE" : parseES(n)?.getType(),
-  toE164IfES = (s) => parseES(s)?.format("E.164") || null,
-  cleanNum = (s) => {
-    let t =
-        String(s || "")
-          .trim()
-          .match(/^(.*\S)\s+x\d+$/i)?.[1] || String(s || "").trim(),
-      w = wNum(t);
-    if (w) {
-      const p = parseES(w);
-      return p
-        ? special.has(p.getType())
-          ? p.nationalNumber
-          : p.format("E.164")
-        : w;
-    }
-    if (isUrl(t)) return t;
-    t = t.replace(conf.noValidoG, "").replace(/[()\-\s]/g, "");
-    const p = parseES(t);
-    return p
-      ? special.has(p.getType())
-        ? p.nationalNumber
-        : p.format("E.164")
-      : t;
-  };
-const dupPhones = (tags = {}) => {
-    const seen = {};
-    Object.entries(tags).forEach(([k, v]) =>
-      String(v || "")
-        .split(";")
-        .map((n) => n.trim())
-        .filter(Boolean)
-        .forEach((raw) => {
-          const nk = toE164IfES(raw);
-          nk && (seen[nk] ||= []).push({ tag: k, raw });
-        })
     );
-    return Object.entries(seen)
-      .filter(([, vals]) => {
-        if (vals.length < 2) return 0;
-        const ks = uniq(vals.map((v) => v.tag));
-        return !(
-          ks.length > 1 &&
-          EXC.some((ex) => ks.every((k) => uniq(ex.map(String)).includes(k)))
-        );
-      })
-      .map(([norm, vals]) => ({ norm, vals }));
-  },
-  dupTxt = (d) =>
-    d
-      .map(
-        (x) =>
-          x.norm + " = " + x.vals.map((v) => v.tag + ": " + v.raw).join(" = ")
-      )
-      .join(" ; "),
-  testVal = (x) =>
-    x.dups?.length
-      ? x.dups.map((d) => d.norm).join(";")
-      : (x.raw || "")
-          .split(";")
-          .map(cleanNum)
-          .filter((n) => !isUrl(n))
-          .join(";");
 const ov = $("#overlay"),
   ovT = $("#ovlTitle"),
   ovL = $("#ovlLog"),
@@ -331,70 +161,10 @@ const normalizeElements = (json, isPostpass) => {
   });
 };
 const validarNumero = (n, tag, ctx = "osm") => {
-  let e = [],
-    s = n.trim(),
-    wn = wNum(s),
-    m = s.match(/^(.*\S)\s+x(\d+)$/i),
-    base = wn ? toE164IfES(wn) || wn : m ? m[1] : s;
-  if (ctx === "osm" && m && !wn) return ["Extensión"];
-  const b = base.trim(),
-    parsed = parseES(b),
-    specialType =
-      parsed && special.has(parsed.getType()) ? parsed.getType() : null;
-  conf.noValido.test(b) && e.push("Caracter no permitido");
-  const plus = (b.match(/\+/g) || []).length,
-    onlyPlus = /^\++$/.test(b.replace(/[ ;]/g, "")),
-    hasDigit = /\d/.test(b);
-  !hasDigit &&
-    e.push(
-      onlyPlus
-        ? b.replace(/[ ;]/g, "").length === 1
-          ? "Solo '+'"
-          : "Solo '+' repetidos"
-        : "Sin dígitos"
-    );
-  plus > 1 && e.push("Más de un '+'");
-  plus === 1 && !b.startsWith("+") && e.push("'+' en posición inválida");
-  if (!specialType && tag !== "phone:ES") {
-    !b.startsWith("+")
-      ? e.push("Sin prefijo internacional (" + conf.prefijo + ")")
-      : b.startsWith(conf.prefijo) || e.push("No ES");
-  } else if (b.startsWith("+") && !b.startsWith(conf.prefijo)) {
-    e.push("No ES");
-  }
-  if (
-    !hasDigit ||
-    e.includes("Más de un '+'") ||
-    e.includes("'+' en posición inválida")
-  )
-    return uniq(e.length ? e : ["No válido"]);
-  if (tag === "phone:ES" && phoneESShort.has(b)) return uniq(e);
-  try {
-    const p = libphonenumber.parsePhoneNumber(b, "ES");
-    if (!p.isPossible()) e.push("Número imposible");
-    else if (!p.isValid()) e.push("Formato inválido");
-    else if (p.country !== "ES") e.push("No ES");
-    else {
-      const exp = modoPersonalizado
-          ? $("#customExpect").value
-          : [...$("#tag").options].find((o) => o.textContent === tag)?.dataset
-              .expect || "any",
-        y = p.getType();
-      exp !== "any" &&
-        (exp === "fixed" && y === "MOBILE" && e.push("Móvil en " + tag),
-        exp === "mobile" &&
-          (y === "FIXED_LINE" || y === "FIXED_LINE_OR_MOBILE") &&
-          e.push("Fijo en " + tag));
-      if (tag === "phone:ES") {
-        special.has(y) || e.push("No es número especial");
-      } else {
-        special.has(y) && e.push("phone:ES · " + y);
-      }
-    }
-  } catch {
-    e.push("No válido");
-  }
-  return ctx === "test" && m && !e.length ? [] : uniq(e);
+  const exp = modoPersonalizado
+    ? $("#customExpect").value
+    : [...$("#tag").options].find((o) => o.textContent === tag)?.dataset.expect || "any";
+  return validarNumeroTelefonico(n, tag, ctx, exp);
 };
 const fmtWebsite = (v) =>
     v
@@ -688,9 +458,9 @@ const renderFromCache = () => {
   tbody.innerHTML = "";
   openGroups.clear();
   const rows =
-    items.length <= ROW_WARN ||
+    items.length <= LIMITE_FILAS ||
     confirm(
-      `Hay ${items.length} filas para generar. Más de ${ROW_WARN.toLocaleString(
+      `Hay ${items.length} filas para generar. Más de ${LIMITE_FILAS.toLocaleString(
         "es-ES"
       )} filas HTML pueden ralentizar el navegador.\n\nEl mapa no tiene este límite. ¿Quieres generar también el listado completo?`
     );
@@ -751,7 +521,7 @@ const updateServer = () => {
 };
 try {
   const s = localStorage.getItem("telAnalysisEngine");
-  SERV[s] && ($("#server").value = s);
+  SERVIDORES[s] && ($("#server").value = s);
 } catch {}
 $("#server").onchange = updateServer;
 updateServer();
