@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/telesosm-logo.webp" width="560">
+  <img src="telesosm-logo.webp" width="560">
   <h1>TelEsOSM</h1>
   <p>Validación de teléfonos y análisis de formatos en OpenStreetMap para España.</p>
   <p><a href="https://atarom.github.io/TelEsOSM/"><strong>Abrir la aplicación</strong></a></p>
