@@ -476,7 +476,8 @@ const openJOSM = (its) => {
     ).catch(() => 0)
   );
 };
-const pointsSource = new ol.source.Vector({ wrapX: false }),
+const groupFeatures = new Map(),
+  pointsSource = new ol.source.Vector({ wrapX: false }),
   pointsStyle = {
     "circle-radius": 6,
     "circle-fill-color": ["case", ["==", ["get", "ok"], 1], "#78d5a4", "#ef8491"],
@@ -485,7 +486,7 @@ const pointsSource = new ol.source.Vector({ wrapX: false }),
   },
   pointsLayer = new ol.layer.WebGLVector({
     source: pointsSource,
-    style: [{ filter: ["==", ["get", "g"], "__none__"], style: pointsStyle }]
+    style: [{ filter: ["==", ["get", "shown"], 1], style: pointsStyle }]
   }),
   formatPointsSource = new ol.source.Vector({ wrapX: false }),
   formatLayer = new ol.layer.WebGLVector({
@@ -541,16 +542,18 @@ const hidePopup = () => {
     popElement.hidden = true;
   },
   setGeo = (d) => {
+    const features = new ol.format.GeoJSON().readFeatures(d, { featureProjection: "EPSG:3857" });
+    groupFeatures.clear();
+    features.forEach((f) => {
+      const id = f.get("g");
+      if (!groupFeatures.has(id)) groupFeatures.set(id, []);
+      groupFeatures.get(id).push(f);
+    });
     pointsSource.clear(true);
-    pointsSource.addFeatures(
-      new ol.format.GeoJSON().readFeatures(d, { featureProjection: "EPSG:3857" })
-    );
+    pointsSource.addFeatures(features);
   },
-  visibility = () => {
-    const filter = openGroups.size
-      ? ["in", ["get", "g"], ["literal", [...openGroups]]]
-      : ["==", ["get", "g"], "__none__"];
-    pointsLayer.setStyle([{ filter, style: pointsStyle }]);
+  visibility = (id, shown) => {
+    (groupFeatures.get(id) || []).forEach((f) => f.set("shown", shown ? 1 : 0));
   },
   showPopup = (x) => {
     const k = osmKey(x),
@@ -581,7 +584,7 @@ const buildGroups = (tbody, grupos, rows = 1) => {
     b.textContent = open ? "▼" : "▶";
     b.title = open ? "Plegar" : "Desplegar";
     open ? openGroups.add(String(i)) : openGroups.delete(String(i));
-    visibility();
+    visibility(String(i), open);
   };
   grupos.forEach((g, gi) => {
     const sep = A("tr");
@@ -718,6 +721,7 @@ const renderFromCache = () => {
         properties: {
           uid: k,
           g: gi.get(k) ?? "",
+          shown: 0,
           ok: soloValidos ? 1 : 0
         },
         geometry: {
@@ -730,7 +734,6 @@ const renderFromCache = () => {
     type: "FeatureCollection",
     features
   });
-  visibility();
   hidePopup();
   if (features.length && activeView === "validation") {
     map.getView().fit(pointsSource.getExtent(), {
