@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#101827">
+<title>QA teléfonos OSM</title>
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.css">
+</head>
+<body>
+<div id="app">
+  <main>
+    <section id="map"></section>
+    <section id="report">
+      <div id="controls">
+        <select id="region">
+          <option disabled selected>Selecciona región</option>
+        </select>
+        <select id="tag"></select>
+        <button id="modeToggle" title="Cambiar modo de selección">🧩</button>
+        <div id="customMode" hidden>
+          <input id="customKey" placeholder="key personalizada (ej. contact:telegram)">
+          <select id="customExpect">
+            <option value="fixed">fijo</option>
+            <option value="mobile">móvil</option>
+            <option value="any" selected>no importa</option>
+          </select>
+        </div>
+        <button id="analyze">Analizar</button>
+      </div>
+      <details id="config">
+        <summary>⚙️ Configuración</summary>
+        <div class="config-body">
+          <label for="server">Motor de consulta</label>
+          <select id="server">
+            <option value="postpass">Postpass · Geofabrik</option>
+            <option value="de">Overpass · Alemania</option>
+            <option value="ru">Overpass · Rusia</option>
+          </select>
+          <small id="serverUrl"></small>
+        </div>
+      </details>
+      <div id="tester">
+        <input id="testInput" placeholder="Introduce uno o varios números separados por ;">
+        <div id="testResult">–</div>
+      </div>
+      <div id="stats"></div>
+      <div id="errors">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Número</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+  <div id="overlay" class="ov" hidden>
+    <div id="ovlBox">
+      <button id="ovx" title="Cerrar">✕</button>
+      <div class="spinner"></div>
+      <div id="ovlTitle">Preparando…</div>
+      <ul id="ovlLog"></ul>
+      <button id="ovlBtn">Cerrar</button>
+    </div>
+  </div>
+</div>
+<script src="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/libphonenumber-js/bundle/libphonenumber-max.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
