@@ -752,38 +752,36 @@ try {
 } catch {}
 $("#server").onchange = updateServer;
 updateServer();
-const getMapItem = async (pixel) => {
-  const showingFormat = activeView === "formats" && formatMapOpen;
-  if (showingFormat) {
-    const coordinate = map.getCoordinateFromPixel(pixel),
-      resolution = map.getView().getResolution();
-    if (!coordinate || !Number.isFinite(resolution)) return null;
-    const radius = resolution * 11,
-      extent = [coordinate[0] - radius, coordinate[1] - radius, coordinate[0] + radius, coordinate[1] + radius];
-    let found = null, best = radius * radius;
-    formatPointsSource.getFeaturesInExtent(extent).forEach((f) => {
-      if (selectedFormat && f.get("formatId") !== selectedFormat.id) return;
-      const point = f.getGeometry().getCoordinates(),
-        distance = (point[0] - coordinate[0]) ** 2 + (point[1] - coordinate[1]) ** 2;
-      if (distance <= best) {
-        best = distance;
-        found = f;
-      }
-    });
-    return found ? formatItemsById.get(found.get("uid")) : null;
-  }
-  if (activeView !== "validation") return null;
-  const features = await pointsLayer.getFeatures(pixel),
-    f = features[0];
-  return f && openGroups.has(f.get("g")) ? itemsById.get(f.get("uid")) : null;
+const getMapItem = (pixel) => {
+  const formats = activeView === "formats" && formatMapOpen;
+  if (!formats && (activeView !== "validation" || !openGroups.size)) return null;
+  const coordinate = map.getCoordinateFromPixel(pixel),
+    resolution = map.getView().getResolution();
+  if (!coordinate || !Number.isFinite(resolution) || resolution <= 0) return null;
+  const radius = resolution * 11,
+    extent = [coordinate[0] - radius, coordinate[1] - radius, coordinate[0] + radius, coordinate[1] + radius],
+    source = formats ? formatPointsSource : pointsSource,
+    items = formats ? formatItemsById : itemsById;
+  let found = null,
+    best = radius * radius;
+  source.forEachFeatureInExtent(extent, (f) => {
+    if (formats ? selectedFormat && f.get("formatId") !== selectedFormat.id : !openGroups.has(f.get("g"))) return;
+    const point = f.getGeometry().getCoordinates(),
+      distance = (point[0] - coordinate[0]) ** 2 + (point[1] - coordinate[1]) ** 2;
+    if (distance <= best) {
+      best = distance;
+      found = f;
+    }
+  });
+  return found ? items.get(found.get("uid")) : null;
 };
-map.on("singleclick", async (e) => {
-  const x = await getMapItem(e.pixel);
+map.on("singleclick", (e) => {
+  const x = getMapItem(e.pixel);
   if (x) showPopup(x);
 });
-map.on("pointermove", async (e) => {
+map.on("pointermove", (e) => {
   if (e.dragging) return;
-  const x = await getMapItem(e.pixel);
+  const x = getMapItem(e.pixel);
   map.getTargetElement().style.cursor = x ? "pointer" : "";
 });
 const mapLayout = () => {
