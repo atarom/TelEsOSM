@@ -57,9 +57,6 @@ const $ = (s) => document.querySelector(s),
     de: "https://overpass-api.de/api/interpreter",
     ru: "https://maps.mail.ru/osm/tools/overpass/api/interpreter"
   },
-  SRC = "phones",
-  LAYER = "phones-layer",
-  FC = { type: "FeatureCollection", features: [] },
   ROW_WARN = 5e4;
 Object.entries(Z).forEach(([k, v]) => {
   const o = A("option", k);
@@ -74,10 +71,6 @@ T.forEach(([k, x]) => {
 let modoPersonalizado = 0,
   soloValidos = 0,
   lastRun = null,
-  geo = FC,
-  ready = 0,
-  pop,
-  popItem,
   itemsById = new Map(),
   popupById = new Map(),
   openGroups = new Set();
@@ -477,50 +470,84 @@ const openJOSM = (its) => {
     ).catch(() => 0)
   );
 };
-const map = new maplibregl.Map({
-  container: "map",
-  style: "https://tiles.openfreemap.org/styles/fiord",
-  center: [-3.7, 40.4],
-  zoom: 6,
-  minZoom: 5,
-  maxZoom: 19,
-  attributionControl: false
-});
-map.addControl(
-  new maplibregl.NavigationControl({ showCompass: false }),
-  "top-left"
-);
-map.addControl(
-  new maplibregl.AttributionControl({ compact: true }),
-  "bottom-right"
-);
-const setGeo = (d) => {
-    geo = d;
-    ready && map.getSource(SRC)?.setData(d);
+const pointsSource = new ol.source.Vector({ wrapX: false }),
+  pointsStyle = {
+    "circle-radius": 6,
+    "circle-fill-color": ["case", ["==", ["get", "ok"], 1], "#78d5a4", "#ef8491"],
+    "circle-stroke-color": "#ffffff",
+    "circle-stroke-width": 1.5
+  },
+  pointsLayer = new ol.layer.WebGLVector({
+    source: pointsSource,
+    style: [{ filter: ["==", ["get", "g"], "__none__"], style: pointsStyle }]
+  }),
+  base = new ol.layer.Tile({
+    className: "dark-base-layer",
+    source: new ol.source.OSM()
+  }),
+  map = new ol.Map({
+    target: "map",
+    layers: [base, pointsLayer],
+    view: new ol.View({
+      center: ol.proj.fromLonLat([-3.7, 40.4]),
+      zoom: 6,
+      minZoom: 5,
+      maxZoom: 19,
+      enableRotation: false
+    }),
+    controls: ol.control.defaults.defaults({ rotate: false })
+  }),
+  popElement = A("div"),
+  popClose = A("button", "✕"),
+  popContent = A("div"),
+  pop = new ol.Overlay({
+    element: popElement,
+    positioning: "bottom-center",
+    offset: [0, -12],
+    autoPan: { animation: { duration: 200 }, margin: 16 }
+  });
+popElement.className = "ol-phone-popup";
+popElement.hidden = true;
+popClose.className = "ol-phone-close";
+popClose.type = "button";
+popClose.title = "Cerrar";
+popClose.setAttribute("aria-label", "Cerrar ventana del elemento");
+popContent.className = "ol-phone-content";
+popElement.append(popClose, popContent);
+map.addOverlay(pop);
+const hidePopup = () => {
+    pop.setPosition(undefined);
+    popElement.hidden = true;
+  },
+  setGeo = (d) => {
+    pointsSource.clear(true);
+    pointsSource.addFeatures(
+      new ol.format.GeoJSON().readFeatures(d, { featureProjection: "EPSG:3857" })
+    );
   },
   visibility = () => {
-    if (!ready) return;
-    const f = openGroups.size
-      ? ["match", ["get", "g"], [...openGroups], true, false]
+    const filter = openGroups.size
+      ? ["in", ["get", "g"], ["literal", [...openGroups]]]
       : ["==", ["get", "g"], "__none__"];
-    map.setFilter(LAYER, f);
+    pointsLayer.setStyle([{ filter, style: pointsStyle }]);
   },
   showPopup = (x) => {
-    const c = [x.lon, x.lat],
-      k = osmKey(x),
+    const k = osmKey(x),
       h = popupById.get(k) || popupHTML(x);
     popupById.set(k, h);
-    pop?.remove();
-    popItem = x;
-    pop = new maplibregl.Popup({ maxWidth: "390px" })
-      .setLngLat(c)
-      .setHTML(h)
-      .addTo(map);
+    popContent.innerHTML = h;
+    popElement.hidden = false;
+    pop.setPosition(ol.proj.fromLonLat([x.lon, x.lat]));
   },
   focusX = (x) => {
-    map.easeTo({ center: [x.lon, x.lat], zoom: 18, duration: 400 });
+    map.getView().animate({
+      center: ol.proj.fromLonLat([x.lon, x.lat]),
+      zoom: 18,
+      duration: 400
+    });
     showPopup(x);
   };
+popClose.onclick = hidePopup;
 const buildGroups = (tbody, grupos, rows = 1) => {
   const toggle = (i) => {
     const h = tbody.querySelector(`tr.group[data-g="${i}"]`),
@@ -683,17 +710,13 @@ const renderFromCache = () => {
     features
   });
   visibility();
-  pop?.remove();
-  pop = popItem = null;
+  hidePopup();
   if (features.length) {
-    const b = new maplibregl.LngLatBounds();
-    features.forEach((f) => b.extend(f.geometry.coordinates));
-    b.isEmpty() ||
-      map.fitBounds(b, {
-        padding: 28,
-        maxZoom: 16,
-        duration: 500
-      });
+    map.getView().fit(pointsSource.getExtent(), {
+      padding: [28, 28, 28, 28],
+      maxZoom: 16,
+      duration: 500
+    });
   }
 };
 const updateServer = () => {
@@ -708,38 +731,19 @@ try {
 } catch {}
 $("#server").onchange = updateServer;
 updateServer();
-map.on("load", () => {
-  ready = 1;
-  map.addSource(SRC, {
-    type: "geojson",
-    data: geo
+map.on("singleclick", (e) => {
+  pointsLayer.getFeatures(e.pixel).then((features) => {
+    const f = features[0],
+      x = f && openGroups.has(f.get("g")) && itemsById.get(f.get("uid"));
+    if (x) showPopup(x);
   });
-  map.addLayer({
-    id: LAYER,
-    type: "circle",
-    source: SRC,
-    filter: ["==", ["get", "g"], "__none__"],
-    paint: {
-      "circle-radius": 6,
-      "circle-color": ["case", ["==", ["get", "ok"], 1], "#78d5a4", "#ef8491"],
-      "circle-stroke-color": "#ffffff",
-      "circle-stroke-width": 1.5,
-      "circle-opacity": 0.95
-    }
+});
+map.on("pointermove", (e) => {
+  if (e.dragging) return;
+  pointsLayer.getFeatures(e.pixel).then((features) => {
+    const f = features[0];
+    map.getTargetElement().style.cursor = f && openGroups.has(f.get("g")) ? "pointer" : "";
   });
-  map.on("click", LAYER, (e) => {
-    const f = e.features?.[0],
-      x = f && itemsById.get(f.properties.uid);
-    x && showPopup(x);
-  });
-  map.on("mouseenter", LAYER, () => {
-    map.getCanvas().style.cursor = "pointer";
-  });
-  map.on("mouseleave", LAYER, () => {
-    map.getCanvas().style.cursor = "";
-  });
-  $(".maplibregl-ctrl-attrib")?.classList.remove("maplibregl-compact-show");
-  visibility();
 });
 $("#ovx").onclick = ovClose;
 ovB.onclick = ovClose;
