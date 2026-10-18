@@ -71,6 +71,12 @@ T.forEach(([k, x]) => {
 let modoPersonalizado = 0,
   soloValidos = 0,
   lastRun = null,
+  activeView = "validation",
+  selectedFormat = null,
+  formatMapOpen = false,
+  formatsById = new Map(),
+  formatItemsById = new Map(),
+  validationCamera = null,
   itemsById = new Map(),
   popupById = new Map(),
   openGroups = new Set();
@@ -481,13 +487,28 @@ const pointsSource = new ol.source.Vector({ wrapX: false }),
     source: pointsSource,
     style: [{ filter: ["==", ["get", "g"], "__none__"], style: pointsStyle }]
   }),
+  formatPointsSource = new ol.source.Vector({ wrapX: false }),
+  formatLayer = new ol.layer.WebGLVector({
+    source: formatPointsSource,
+    variables: { selectedFormat: -1 },
+    style: [{
+      filter: ["any", ["==", ["var", "selectedFormat"], 0], ["==", ["get", "formatId"], ["var", "selectedFormat"]]],
+      style: {
+        "circle-radius": 6,
+        "circle-fill-color": "#8db6e8",
+        "circle-stroke-color": "#ffffff",
+        "circle-stroke-width": 1.5
+      }
+    }],
+    visible: false
+  }),
   base = new ol.layer.Tile({
     className: "dark-base-layer",
     source: new ol.source.OSM()
   }),
   map = new ol.Map({
     target: "map",
-    layers: [base, pointsLayer],
+    layers: [base, pointsLayer, formatLayer],
     view: new ol.View({
       center: ol.proj.fromLonLat([-3.7, 40.4]),
       zoom: 6,
@@ -711,7 +732,7 @@ const renderFromCache = () => {
   });
   visibility();
   hidePopup();
-  if (features.length) {
+  if (features.length && activeView === "validation") {
     map.getView().fit(pointsSource.getExtent(), {
       padding: [28, 28, 28, 28],
       maxZoom: 16,
@@ -731,20 +752,174 @@ try {
 } catch {}
 $("#server").onchange = updateServer;
 updateServer();
-map.on("singleclick", (e) => {
-  pointsLayer.getFeatures(e.pixel).then((features) => {
-    const f = features[0],
-      x = f && openGroups.has(f.get("g")) && itemsById.get(f.get("uid"));
-    if (x) showPopup(x);
-  });
+const getMapItem = async (pixel) => {
+  const showingFormat = activeView === "formats" && formatMapOpen;
+  if (showingFormat) {
+    const coordinate = map.getCoordinateFromPixel(pixel),
+      resolution = map.getView().getResolution();
+    if (!coordinate || !Number.isFinite(resolution)) return null;
+    const radius = resolution * 11,
+      extent = [coordinate[0] - radius, coordinate[1] - radius, coordinate[0] + radius, coordinate[1] + radius];
+    let found = null, best = radius * radius;
+    formatPointsSource.getFeaturesInExtent(extent).forEach((f) => {
+      if (selectedFormat && f.get("formatId") !== selectedFormat.id) return;
+      const point = f.getGeometry().getCoordinates(),
+        distance = (point[0] - coordinate[0]) ** 2 + (point[1] - coordinate[1]) ** 2;
+      if (distance <= best) {
+        best = distance;
+        found = f;
+      }
+    });
+    return found ? formatItemsById.get(found.get("uid")) : null;
+  }
+  if (activeView !== "validation") return null;
+  const features = await pointsLayer.getFeatures(pixel),
+    f = features[0];
+  return f && openGroups.has(f.get("g")) ? itemsById.get(f.get("uid")) : null;
+};
+map.on("singleclick", async (e) => {
+  const x = await getMapItem(e.pixel);
+  if (x) showPopup(x);
 });
-map.on("pointermove", (e) => {
+map.on("pointermove", async (e) => {
   if (e.dragging) return;
-  pointsLayer.getFeatures(e.pixel).then((features) => {
-    const f = features[0];
-    map.getTargetElement().style.cursor = f && openGroups.has(f.get("g")) ? "pointer" : "";
-  });
+  const x = await getMapItem(e.pixel);
+  map.getTargetElement().style.cursor = x ? "pointer" : "";
 });
+const mapLayout = () => {
+  const formats = activeView === "formats",
+    split = formats && formatMapOpen,
+    main = $("main");
+  main.classList.toggle("formats-full", formats && !split);
+  main.classList.toggle("formats-split", Boolean(split));
+  $("#validationPane").hidden = formats;
+  $("#formatsPane").hidden = !formats;
+  $("#tabValidation").setAttribute("aria-selected", String(!formats));
+  $("#tabFormats").setAttribute("aria-selected", String(formats));
+  pointsLayer.setVisible(!formats);
+  formatLayer.setVisible(Boolean(split));
+  hidePopup();
+  if (!formats || split) {
+    requestAnimationFrame(() => {
+      map.updateSize();
+      if (split) {
+        const extent = selectedFormat?.extent || (formatPointsSource.getFeatures().length ? formatPointsSource.getExtent() : null);
+        if (extent) map.getView().fit(extent, { padding: [28, 28, 28, 28], maxZoom: 16, duration: 300 });
+      }
+    });
+  }
+};
+const showView = (view) => {
+  if (activeView === view) return;
+  if (activeView === "validation") {
+    validationCamera = {
+      center: map.getView().getCenter()?.slice(),
+      zoom: map.getView().getZoom()
+    };
+  }
+  activeView = view;
+  mapLayout();
+  if (view === "validation") {
+    requestAnimationFrame(() => {
+      if (validationCamera) {
+        map.getView().setCenter(validationCamera.center);
+        map.getView().setZoom(validationCamera.zoom);
+      } else if (pointsSource.getFeatures().length) {
+        map.getView().fit(pointsSource.getExtent(), { padding: [28, 28, 28, 28], maxZoom: 16 });
+      }
+    });
+  }
+};
+const updateFormatSelection = () => {
+  $("#formatRows").querySelectorAll(".format-row").forEach((row) => {
+    const active = Number(row.dataset.formatId) === selectedFormat?.id;
+    row.setAttribute("aria-pressed", String(active));
+    row.title = active ? "Mostrar todos los elementos" : "Mostrar este formato en el mapa";
+  });
+  $("#formatExpand").hidden = !selectedFormat && !formatMapOpen;
+  $("#formatExpand").textContent = formatMapOpen ? "⛶ Solo ranking" : "◧ Mostrar mapa";
+  $("#formatSelection").textContent = selectedFormat
+    ? `${selectedFormat.name} · ${selectedFormat.count.toLocaleString("es-ES")} valores · ${selectedFormat.mapped.toLocaleString("es-ES")} elementos en el mapa`
+    : formatMapOpen ? "Todos los elementos de la consulta." : "Selecciona un formato para mostrarlo en el mapa.";
+};
+const selectFormat = (id) => {
+  const alreadySelected = selectedFormat?.id === id;
+  selectedFormat = alreadySelected ? null : formatsById.get(id) || null;
+  formatMapOpen = alreadySelected || Boolean(selectedFormat);
+  formatLayer.updateStyleVariables({ selectedFormat: alreadySelected ? 0 : selectedFormat?.id ?? -1 });
+  updateFormatSelection();
+  mapLayout();
+};
+const renderFormats = (datos, area, tag) => {
+  const groups = new Map(),
+    allFeatures = [];
+  let elements = 0, values = 0, multi = 0;
+  formatItemsById = new Map();
+  datos.forEach((item) => {
+    const valuesRaw = item.raw.split(";").map((n) => n.trim()).filter(Boolean);
+    if (!valuesRaw.length) return;
+    elements++;
+    values += valuesRaw.length;
+    if (valuesRaw.length > 1) multi++;
+    const distinct = new Set();
+    valuesRaw.forEach((value) => {
+      const name = value.replace(/\d/g, "#");
+      let group = groups.get(name);
+      if (!group) {
+        group = { id: groups.size + 1, name, count: 0, mapped: 0, extent: null };
+        groups.set(name, group);
+      }
+      group.count++;
+      distinct.add(group);
+    });
+    if (!Number.isFinite(item.lon) || !Number.isFinite(item.lat)) return;
+    const uid = osmKey(item),
+      coordinate = ol.proj.fromLonLat([item.lon, item.lat]);
+    formatItemsById.set(uid, item);
+    distinct.forEach((group) => {
+      group.mapped++;
+      if (!group.extent) group.extent = [coordinate[0], coordinate[1], coordinate[0], coordinate[1]];
+      else {
+        group.extent[0] = Math.min(group.extent[0], coordinate[0]);
+        group.extent[1] = Math.min(group.extent[1], coordinate[1]);
+        group.extent[2] = Math.max(group.extent[2], coordinate[0]);
+        group.extent[3] = Math.max(group.extent[3], coordinate[1]);
+      }
+      allFeatures.push(new ol.Feature({ geometry: new ol.geom.Point(coordinate), uid, formatId: group.id }));
+    });
+  });
+  formatPointsSource.clear(true);
+  formatPointsSource.addFeatures(allFeatures);
+  formatsById = new Map([...groups.values()].map((group) => [group.id, group]));
+  const ranking = [...groups.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
+    top = ranking[0]?.count || 1;
+  $("#formatArea").textContent = `${area} · ${tag}`;
+  $("#formatElements").textContent = `Elementos: ${elements.toLocaleString("es-ES")}`;
+  $("#formatValues").textContent = `Valores: ${values.toLocaleString("es-ES")}`;
+  $("#formatMulti").textContent = `Multi: ${multi.toLocaleString("es-ES")}`;
+  $("#formatCount").textContent = `Formatos: ${ranking.length.toLocaleString("es-ES")}`;
+  $("#formatRows").innerHTML = ranking.length
+    ? ranking.map((g) => `<button class="format-row" type="button" data-format-id="${g.id}" aria-pressed="false" title="Mostrar en mapa"><span class="format-visual" style="--pct:${(100 * g.count / top).toFixed(2)}%">${esc(g.name)}</span><span>${g.count.toLocaleString("es-ES")}</span><span>${(100 * g.count / values).toLocaleString("es-ES", { maximumFractionDigits: 2 })}%</span></button>`).join("")
+    : '<p class="format-empty">No hay valores para esta etiqueta y región.</p>';
+  $("#formatRows").scrollTop = 0;
+  selectedFormat = null;
+  formatMapOpen = false;
+  formatLayer.updateStyleVariables({ selectedFormat: -1 });
+  updateFormatSelection();
+  mapLayout();
+};
+$("#tabValidation").onclick = () => showView("validation");
+$("#tabFormats").onclick = () => showView("formats");
+$("#formatRows").onclick = (e) => {
+  const row = e.target.closest("button.format-row");
+  if (row) selectFormat(Number(row.dataset.formatId));
+};
+$("#formatExpand").onclick = () => {
+  if (!selectedFormat && !formatMapOpen) return;
+  formatMapOpen = !formatMapOpen;
+  updateFormatSelection();
+  mapLayout();
+};
 $("#ovx").onclick = ovClose;
 ovB.onclick = ovClose;
 $("#testInput").oninput = actualizarTester;
@@ -843,6 +1018,7 @@ $("#analyze").onclick = async () => {
           ? 1
           : a.tipo.localeCompare(b.tipo)
       );
+    const areaName = $("#region").selectedOptions[0]?.textContent || String(zona);
     lastRun = {
       gruposBad,
       bad,
@@ -853,6 +1029,8 @@ $("#analyze").onclick = async () => {
     };
     soloValidos = 0;
     renderFromCache();
+    if (activeView === "formats") validationCamera = null;
+    renderFormats(datos, areaName, tag);
     ovSet("Procesamiento completado");
     ovAdd("✅ Todo OK", "ok");
     setTimeout(ovClose, 1200);

@@ -41,6 +41,11 @@
           <small id="serverUrl"></small>
         </div>
       </details>
+      <div id="tabs" role="tablist" aria-label="Vista de resultados">
+        <button id="tabValidation" type="button" role="tab" aria-selected="true" aria-controls="validationPane">Validación</button>
+        <button id="tabFormats" type="button" role="tab" aria-selected="false" aria-controls="formatsPane">Formatos</button>
+      </div>
+      <div id="validationPane" role="tabpanel" aria-labelledby="tabValidation">
       <div id="tester">
         <input id="testInput" placeholder="Introduce uno o varios números separados por ;">
         <div id="testResult">–</div>
@@ -56,6 +61,22 @@
           </thead>
           <tbody></tbody>
         </table>
+      </div>
+      </div>
+      <div id="formatsPane" role="tabpanel" aria-labelledby="tabFormats" hidden>
+        <div id="formatSummary">
+          <span id="formatArea">Sin analizar</span>
+          <span id="formatElements">Elementos: 0</span>
+          <span id="formatValues">Valores: 0</span>
+          <span id="formatMulti">Multi: 0</span>
+          <span id="formatCount">Formatos: 0</span>
+        </div>
+        <div id="formatTools">
+          <span id="formatSelection">Selecciona un formato para mostrarlo en el mapa.</span>
+          <button id="formatExpand" type="button" hidden>Solo ranking</button>
+        </div>
+        <div id="formatHead"><span>Formato</span><span>Valores</span><span>%</span></div>
+        <div id="formatRows" aria-label="Ranking de formatos"><p class="format-empty">Analiza una región y una etiqueta para ver los formatos.</p></div>
       </div>
     </section>
   </main>
