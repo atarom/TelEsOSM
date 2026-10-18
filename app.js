@@ -504,7 +504,7 @@ const pointsSource = new ol.source.Vector({ wrapX: false }),
   }),
   base = new ol.layer.Tile({
     className: "dark-base-layer",
-    source: new ol.source.OSM()
+    source: new ol.source.OSM({ referrerPolicy: "strict-origin-when-cross-origin" })
   }),
   map = new ol.Map({
     target: "map",
