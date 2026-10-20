@@ -8,7 +8,7 @@
 
 **TelEsOSM** permite revisar las etiquetas telefónicas de [OpenStreetMap](https://www.openstreetmap.org/) por comunidad autónoma o en toda España. Identifica problemas en los números, detecta duplicados y distingue numeración fija, móvil y especial.
 
-La vista **Validación** agrupa las incidencias y localiza los elementos en el mapa, con enlaces a OSM, iD, JOSM y Rapid. La vista **Formatos** muestra un ranking de cómo se escriben los teléfonos, con cantidades y porcentajes: al seleccionar un formato.
+La vista **Validación** agrupa las incidencias y localiza los elementos en el mapa, con enlaces a OSM, iD, JOSM y Rapid. La vista **Formatos** muestra un ranking de cómo se escriben los teléfonos, con cantidades y porcentajes.
 
 ### Tecnologías y datos
 
