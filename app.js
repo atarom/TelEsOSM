@@ -380,6 +380,7 @@ const buildGroups = (tbody, grupos) => {
       const { group, index } = section,
         open = openGroups.has(String(index)),
         sep = A("tr");
+      sep.dataset.row = section.start;
       sep.className = "group";
       sep.dataset.g = index;
       sep.dataset.open = open ? "1" : "0";
@@ -399,10 +400,11 @@ const buildGroups = (tbody, grupos) => {
       };
       return sep;
     },
-    itemRow = (item, groupIndex, itemIndex) => {
+    itemRow = (item, groupIndex, itemIndex, rowIndex) => {
       const key = osmKey(item), raw = item.listRaw || item.raw || "—",
         row = A("tr", `<td class="mono"><a href="https://www.openstreetmap.org/${key}" target="_blank" rel="noopener">${key}</a></td><td class="mono num" title="${esc(raw)}">${esc(raw)}</td>`);
       row.className = "data-row";
+      row.dataset.row = rowIndex;
       row.dataset.g = groupIndex;
       row.dataset.even = itemIndex % 2 ? "1" : "0";
       row.onclick = (e) => {
@@ -418,6 +420,11 @@ const buildGroups = (tbody, grupos) => {
     },
     draw = () => {
       frame = 0;
+      const focused = document.activeElement,
+        focusRow = focused?.closest("tr[data-row]"),
+        focusIndex = focusRow && tbody.contains(focusRow)
+          ? [...focusRow.querySelectorAll("button, a[href]")].indexOf(focused) : -1,
+        focusKey = focusIndex < 0 ? -1 : Number(focusRow.dataset.row);
       const start = Math.min(total, Math.max(0, Math.floor(viewport.scrollTop / rowHeight) - overscan)),
         end = Math.min(total, Math.max(start, Math.ceil((viewport.scrollTop + viewport.clientHeight) / rowHeight) + overscan)),
         fragment = document.createDocumentFragment();
@@ -432,18 +439,48 @@ const buildGroups = (tbody, grupos) => {
       for (let i = start; i < end; i++) {
         const section = sections[sectionIndex];
         if (i === section.start) fragment.append(header(section));
-        else fragment.append(itemRow(section.group.items[i - section.start - 1], section.index, i - section.start - 1));
+        else fragment.append(itemRow(section.group.items[i - section.start - 1], section.index, i - section.start - 1, i));
         if (i + 1 === section.start + section.size) sectionIndex++;
       }
       if (end < total) fragment.append(spacer((total - end) * rowHeight));
       tbody.replaceChildren(fragment);
+      if (focusKey >= 0) tbody.querySelector(`tr[data-row="${focusKey}"]`)?.querySelectorAll("button, a[href]")[focusIndex]?.focus({ preventScroll: true });
     },
     schedule = () => {
       if (!frame) frame = requestAnimationFrame(draw);
+    },
+    moveFocus = (event) => {
+      if (event.key !== "Tab" || event.altKey || event.ctrlKey || event.metaKey) return;
+      const row = event.target.closest("tr[data-row]");
+      if (!row || !tbody.contains(row)) return;
+      const controls = [...row.querySelectorAll("button, a[href]")],
+        index = controls.indexOf(event.target),
+        backward = event.shiftKey;
+      if (index < 0) return;
+      let targetRow = Number(row.dataset.row),
+        targetControl = index + (backward ? -1 : 1);
+      if (targetControl < 0) {
+        targetRow--;
+        targetControl = -1;
+      } else if (targetControl === controls.length) {
+        targetRow++;
+        targetControl = 0;
+      }
+      if (targetRow < 0 || targetRow >= total) return;
+      event.preventDefault();
+      const top = targetRow * rowHeight,
+        bottom = top + rowHeight;
+      if (top < viewport.scrollTop) viewport.scrollTop = Math.max(0, top - rowHeight);
+      else if (bottom > viewport.scrollTop + viewport.clientHeight) viewport.scrollTop = bottom - viewport.clientHeight + rowHeight;
+      if (!tbody.querySelector(`tr[data-row="${targetRow}"]`)) draw();
+      const next = tbody.querySelector(`tr[data-row="${targetRow}"]`),
+        target = next?.querySelectorAll("button, a[href]");
+      (targetControl < 0 ? target?.[target.length - 1] : target?.[targetControl])?.focus({ preventScroll: true });
     };
   if (viewport.virtualDrawCancel) viewport.virtualDrawCancel();
   viewport.virtualDrawCancel = () => cancelAnimationFrame(frame);
   viewport.onscroll = schedule;
+  tbody.onkeydown = moveFocus;
   if (viewport.virtualResize) viewport.virtualResize.disconnect();
   viewport.virtualResize = new ResizeObserver(schedule);
   viewport.virtualResize.observe(viewport);

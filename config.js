@@ -51,7 +51,6 @@ export const SERVIDORES = {
   de: "https://overpass-api.de/api/interpreter",
   ru: "https://maps.mail.ru/osm/tools/overpass/api/interpreter"
 };
-export const LIMITE_FILAS = 5e4;
 export const REGLAS_ES = {
   prefijo: "+34",
   noValido: /[^0-9+ ;]|[\u00A0\u2000-\u200B\u202F\u205F\u3000\t\r\n]/,

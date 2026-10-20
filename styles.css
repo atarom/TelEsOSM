@@ -181,12 +181,6 @@ button,
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-#testResult.ok {
-  color: var(--ok);
-}
-#testResult.error {
-  color: var(--error);
-}
 #stats {
   display: flex;
   justify-content: space-between;
@@ -221,6 +215,7 @@ button,
 #errors {
   flex: 1;
   overflow: auto;
+  overflow-anchor: none;
 }
 table {
   width: 100%;
@@ -316,12 +311,6 @@ tr.group td {
   border: 1px solid var(--a);
   border-radius: 7px;
   color: var(--a);
-}
-.row-note {
-  padding: 10px !important;
-  color: var(--m);
-  text-align: center;
-  font-style: italic;
 }
 .ov[hidden] {
   display: none !important;
