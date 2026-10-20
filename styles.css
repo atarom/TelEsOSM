@@ -233,16 +233,38 @@ td {
   text-align: left;
   vertical-align: top;
 }
+#errors .virtual-table {
+  table-layout: fixed;
+}
+#errors .virtual-table th:first-child {
+  width: 38%;
+}
+#errors .virtual-table tbody tr:not(.virtual-gap) {
+  height: 40px;
+}
+#errors .virtual-table tbody tr:not(.virtual-gap) td {
+  height: 40px;
+  padding: 0 9px;
+  vertical-align: middle;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#errors .virtual-table tbody .virtual-gap td {
+  padding: 0;
+  border: 0;
+  line-height: 0;
+}
 thead th {
   position: sticky;
   top: 0;
   z-index: 2;
   background: var(--p2);
 }
-tbody tr:not(.group):nth-child(even) {
+tbody tr.data-row[data-even="1"] {
   background: #ffffff03;
 }
-tbody tr:hover:not(.group) {
+tbody tr.data-row:hover {
   background: #8db6e80d;
 }
 a {

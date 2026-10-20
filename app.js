@@ -1,4 +1,4 @@
-import { REGIONES, ETIQUETAS, SERVIDORES, LIMITE_FILAS } from "./config.js";
+import { REGIONES, ETIQUETAS, SERVIDORES } from "./config.js";
 import { uniq, tipoPhoneES, dupPhones, dupTxt, testVal, validarNumero as validarNumeroTelefonico } from "./telefonos.js";
 const $ = (s) => document.querySelector(s),
   A = (t, h) => {
@@ -246,8 +246,8 @@ const openJOSM = (its) => {
     ).catch(() => 0)
   );
 };
-const groupFeatures = new Map(),
-  pointsSource = new ol.source.Vector({ wrapX: false }),
+let groupMasks = [];
+const pointsSource = new ol.source.Vector({ wrapX: false }),
   pointsStyle = {
     "circle-radius": 6,
     "circle-fill-color": ["case", ["==", ["get", "ok"], 1], "#78d5a4", "#ef8491"],
@@ -256,7 +256,8 @@ const groupFeatures = new Map(),
   },
   pointsLayer = new ol.layer.WebGLVector({
     source: pointsSource,
-    style: [{ filter: ["==", ["get", "shown"], 1], style: pointsStyle }]
+    variables: { groupMask0: 0 },
+    style: [{ filter: ["==", ["var", "groupMask0"], 1], style: pointsStyle }]
   }),
   formatPointsSource = new ol.source.Vector({ wrapX: false }),
   formatLayer = new ol.layer.WebGLVector({
@@ -313,17 +314,22 @@ const hidePopup = () => {
   },
   setGeo = (d) => {
     const features = new ol.format.GeoJSON().readFeatures(d, { featureProjection: "EPSG:3857" });
-    groupFeatures.clear();
-    features.forEach((f) => {
-      const id = f.get("g");
-      if (!groupFeatures.has(id)) groupFeatures.set(id, []);
-      groupFeatures.get(id).push(f);
-    });
     pointsSource.clear(true);
     pointsSource.addFeatures(features);
   },
+  setGroupStyle = (count) => {
+    groupMasks = Array(Math.max(1, Math.ceil(count / 20))).fill(0);
+    const masks = Object.fromEntries(groupMasks.map((value, i) => ["groupMask" + i, value])),
+      pickMask = groupMasks.length === 1
+        ? ["var", "groupMask0"]
+        : ["match", ["floor", ["/", ["get", "grp"], 20]], ...groupMasks.flatMap((_, i) => [i, ["var", "groupMask" + i]]), 0];
+    pointsLayer.updateStyleVariables(masks);
+    pointsLayer.setStyle([{ filter: ["==", ["%", ["floor", ["/", pickMask, ["^", 2, ["%", ["get", "grp"], 20]]]], 2], 1], style: pointsStyle }]);
+  },
   visibility = (id, shown) => {
-    (groupFeatures.get(id) || []).forEach((f) => f.set("shown", shown ? 1 : 0));
+    const i = Number(id), slot = Math.floor(i / 20), bit = 2 ** (i % 20);
+    groupMasks[slot] = shown ? groupMasks[slot] + bit : groupMasks[slot] - bit;
+    pointsLayer.updateStyleVariables({ ["groupMask" + slot]: groupMasks[slot] });
   },
   showPopup = (x) => {
     const k = osmKey(x),
@@ -342,63 +348,108 @@ const hidePopup = () => {
     showPopup(x);
   };
 popClose.onclick = hidePopup;
-const buildGroups = (tbody, grupos, rows = 1) => {
-  const toggle = (i) => {
-    const h = tbody.querySelector(`tr.group[data-g="${i}"]`),
-      open = h.dataset.open !== "1",
-      b = h.querySelector(".btn-toggle");
-    tbody
-      .querySelectorAll(`tr:not(.group)[data-g="${i}"]`)
-      .forEach((tr) => (tr.style.display = open ? "" : "none"));
-    h.dataset.open = open ? "1" : "0";
-    b.textContent = open ? "▼" : "▶";
-    b.title = open ? "Plegar" : "Desplegar";
-    open ? openGroups.add(String(i)) : openGroups.delete(String(i));
-    visibility(String(i), open);
-  };
-  grupos.forEach((g, gi) => {
-    const sep = A("tr");
-    sep.className = "group";
-    sep.dataset.g = gi;
-    sep.dataset.open = "0";
-    sep.innerHTML = `<td colspan="2"><div class="gbar"><button class="btn-toggle">▶</button><span class="gtitle">${esc(
-      g.tipo
-    )}</span><span class="gcount">${
-      g.items.length
-    }</span><div class="actions"><button class="btn-clip" title="Copiar Overpass">📋</button><button class="btn-ot" title="Abrir en Overpass Turbo">🧭</button><button class="btn-josm" title="Cargar grupo en JOSM">🧰</button></div></div></td>`;
-    tbody.append(sep);
-    const qg = buildQ(g.items);
-    sep.onclick = () => toggle(gi);
-    sep.querySelector(".btn-clip").onclick = (e) => (
-      e.stopPropagation(), clip(qg).then(() => toast("Consulta copiada"))
-    );
-    sep.querySelector(".btn-ot").onclick = (e) => (
-      e.stopPropagation(), openOT(qg)
-    );
-    sep.querySelector(".btn-josm").onclick = (e) => (
-      e.stopPropagation(), openJOSM(g.items)
-    );
-    rows &&
-      g.items.forEach((x) => {
-        const key = osmKey(x),
-          row = A(
-            "tr",
-            `<td class="mono"><a href="https://www.openstreetmap.org/${key}" target="_blank" rel="noopener">${key}</a></td><td class="mono num">${esc(
-              x.listRaw || x.raw || "—"
-            )}</td>`
-          );
-        row.dataset.g = gi;
-        row.style.display = "none";
-        tbody.append(row);
-        row.onclick = () => focusX(x);
-        row.querySelector(".num").onclick = (e) => {
-          e.stopPropagation();
-          focusX(x);
-          $("#testInput").value = testVal(x);
-          $("#testInput").dispatchEvent(new Event("input"));
-        };
+const buildGroups = (tbody, grupos) => {
+  const viewport = $("#errors"),
+    rowHeight = 40,
+    overscan = 12;
+  let sections = [], total = 0, frame = 0;
+  const spacer = (height) => {
+    const tr = A("tr", '<td colspan="2"></td>');
+    tr.className = "virtual-gap";
+    tr.style.height = height + "px";
+    return tr;
+  },
+    rebuild = () => {
+      total = 0;
+      sections = grupos.map((group, index) => {
+        const section = { group, index, start: total, size: 1 + (openGroups.has(String(index)) ? group.items.length : 0) };
+        total += section.size;
+        return section;
       });
-  });
+    },
+    visibilityAt = (i) => {
+      const id = String(i), open = !openGroups.has(id),
+        focused = document.activeElement?.classList.contains("btn-toggle") && document.activeElement.closest(".group")?.dataset.g === id;
+      open ? openGroups.add(id) : openGroups.delete(id);
+      visibility(i, open);
+      rebuild();
+      draw();
+      if (focused) tbody.querySelector(`tr.group[data-g="${i}"] .btn-toggle`)?.focus();
+    },
+    header = (section) => {
+      const { group, index } = section,
+        open = openGroups.has(String(index)),
+        sep = A("tr");
+      sep.className = "group";
+      sep.dataset.g = index;
+      sep.dataset.open = open ? "1" : "0";
+      sep.innerHTML = `<td colspan="2"><div class="gbar"><button class="btn-toggle" type="button" aria-label="${open ? "Plegar" : "Desplegar"} grupo" aria-expanded="${open}">${open ? "▼" : "▶"}</button><span class="gtitle" title="${esc(group.tipo)}">${esc(group.tipo)}</span><span class="gcount">${group.items.length}</span><div class="actions"><button class="btn-clip" title="Copiar Overpass">📋</button><button class="btn-ot" title="Abrir en Overpass Turbo">🧭</button><button class="btn-josm" title="Cargar grupo en JOSM">🧰</button></div></div></td>`;
+      sep.onclick = () => visibilityAt(index);
+      sep.querySelector(".btn-clip").onclick = (e) => {
+        e.stopPropagation();
+        clip(buildQ(group.items)).then(() => toast("Consulta copiada"));
+      };
+      sep.querySelector(".btn-ot").onclick = (e) => {
+        e.stopPropagation();
+        openOT(buildQ(group.items));
+      };
+      sep.querySelector(".btn-josm").onclick = (e) => {
+        e.stopPropagation();
+        openJOSM(group.items);
+      };
+      return sep;
+    },
+    itemRow = (item, groupIndex, itemIndex) => {
+      const key = osmKey(item), raw = item.listRaw || item.raw || "—",
+        row = A("tr", `<td class="mono"><a href="https://www.openstreetmap.org/${key}" target="_blank" rel="noopener">${key}</a></td><td class="mono num" title="${esc(raw)}">${esc(raw)}</td>`);
+      row.className = "data-row";
+      row.dataset.g = groupIndex;
+      row.dataset.even = itemIndex % 2 ? "1" : "0";
+      row.onclick = (e) => {
+        if (!e.target.closest("a")) focusX(item);
+      };
+      row.querySelector(".num").onclick = (e) => {
+        e.stopPropagation();
+        focusX(item);
+        $("#testInput").value = testVal(item);
+        $("#testInput").dispatchEvent(new Event("input"));
+      };
+      return row;
+    },
+    draw = () => {
+      frame = 0;
+      const start = Math.min(total, Math.max(0, Math.floor(viewport.scrollTop / rowHeight) - overscan)),
+        end = Math.min(total, Math.max(start, Math.ceil((viewport.scrollTop + viewport.clientHeight) / rowHeight) + overscan)),
+        fragment = document.createDocumentFragment();
+      if (start) fragment.append(spacer(start * rowHeight));
+      let lo = 0, hi = sections.length - 1;
+      while (lo <= hi) {
+        const mid = (lo + hi) >>> 1;
+        if (sections[mid].start + sections[mid].size <= start) lo = mid + 1;
+        else hi = mid - 1;
+      }
+      let sectionIndex = lo;
+      for (let i = start; i < end; i++) {
+        const section = sections[sectionIndex];
+        if (i === section.start) fragment.append(header(section));
+        else fragment.append(itemRow(section.group.items[i - section.start - 1], section.index, i - section.start - 1));
+        if (i + 1 === section.start + section.size) sectionIndex++;
+      }
+      if (end < total) fragment.append(spacer((total - end) * rowHeight));
+      tbody.replaceChildren(fragment);
+    },
+    schedule = () => {
+      if (!frame) frame = requestAnimationFrame(draw);
+    };
+  if (viewport.virtualDrawCancel) viewport.virtualDrawCancel();
+  viewport.virtualDrawCancel = () => cancelAnimationFrame(frame);
+  viewport.onscroll = schedule;
+  if (viewport.virtualResize) viewport.virtualResize.disconnect();
+  viewport.virtualResize = new ResizeObserver(schedule);
+  viewport.virtualResize.observe(viewport);
+  viewport.scrollTop = 0;
+  rebuild();
+  draw();
 };
 const actualizarTester = () => {
     const v = $("#testInput").value.trim(),
@@ -457,23 +508,8 @@ const renderFromCache = () => {
   renderStats(t, v, l);
   tbody.innerHTML = "";
   openGroups.clear();
-  const rows =
-    items.length <= LIMITE_FILAS ||
-    confirm(
-      `Hay ${items.length} filas para generar. Más de ${LIMITE_FILAS.toLocaleString(
-        "es-ES"
-      )} filas HTML pueden ralentizar el navegador.\n\nEl mapa no tiene este límite. ¿Quieres generar también el listado completo?`
-    );
-  buildGroups(tbody, grupos, rows);
-  if (!rows) {
-    const n = A(
-      "tr",
-      `<td colspan="2" class="row-note">Listado de ${items.length.toLocaleString(
-        "es-ES"
-      )} filas omitido. Los grupos y el mapa siguen disponibles.</td>`
-    );
-    tbody.prepend(n);
-  }
+  setGroupStyle(grupos.length);
+  buildGroups(tbody, grupos);
   itemsById = new Map();
   popupById = new Map();
   const gi = new Map();
@@ -491,7 +527,7 @@ const renderFromCache = () => {
         properties: {
           uid: k,
           g: gi.get(k) ?? "",
-          shown: 0,
+          grp: Number(gi.get(k) ?? -1),
           ok: soloValidos ? 1 : 0
         },
         geometry: {
