@@ -839,13 +839,20 @@ $("#analyze").onclick = async () => {
         (x) =>
           x.nums.length && !x.dups.length && x.nums.every((n) => !n.errs.length)
       ),
+      expected = modoPersonalizado
+        ? $("#customExpect").value
+        : [...$("#tag").options].find((o) => o.textContent === tag)?.dataset.expect || "any",
       gruposBad = Object.values(
         bad.reduce((a, x) => {
+          const tipos = x.nums.length > 1 && !x.dups.length && (expected === "fixed" || expected === "mobile")
+              ? new Set(x.nums.map((n) => tipoPhoneES(n.n)))
+              : null,
+            mezcla = tipos?.has("MOBILE") && (tipos.has("FIXED_LINE") || tipos.has("FIXED_LINE_OR_MOBILE"));
           let k = x.dups.length
             ? "Número duplicado"
-            : x.nums
-                .map((n) => n.errs.join("; "))
-                .filter(Boolean)
+            : mezcla
+            ? `Fijo + móvil en ${tag}`
+            : uniq(x.nums.map((n) => n.errs.join("; ")))
                 .join("; ")
                 .replace(/Caracter no permitido.*/, "Caracter no permitido") ||
               "Desconocido";
