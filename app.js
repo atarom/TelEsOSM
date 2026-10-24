@@ -204,6 +204,14 @@ const fmtWebsite = (v) =>
     x.lat +
     "/" +
     x.lon;
+const popupIcon = (shape) => `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${shape}</svg>`;
+const POPUP_ICONS = {
+  osm: popupIcon('<circle cx="10.5" cy="10.5" r="6.3"/><path d="m15.2 15.2 5.2 5.2"/>'),
+  id: popupIcon('<path d="M4 20h4l11-11-4-4L4 16v4Z"/><path d="m13 7 4 4"/>'),
+  rapid: popupIcon('<path d="M13 2 5 13h6l-1 9 9-12h-6l1-8Z"/>'),
+  level0: popupIcon('<path d="M4.2 4.5v14.8h7.4"/><rect x="14.2" y="4.5" width="7.1" height="14.8" rx="3.5"/><circle cx="17.75" cy="11.9" r="1.15" fill="currentColor" stroke="none"/>'),
+  josm: popupIcon('<path d="M3 6 9 3l6 3 6-3v10M3 6v14l6-3 4.3 2M9 3v14M15 6v8"/><path d="m14.1 20.4 2.5-.6 4.9-5-1.9-1.9-4.9 5-.6 2.5Z"/>')
+};
 const popupHTML = (x) => {
   const key = osmKey(x),
     rows = Object.entries(x.tags || {})
@@ -228,17 +236,16 @@ const popupHTML = (x) => {
           )
           .join("")}</div></div>`
       : "";
-  return `<div class="popup-box"><div class="popup-title mono">${esc(
-    x.tags?.name || key
-  )}</div><div class="popup-tags">${rows}</div>${db}<div class="popup-actions"><a href="https://www.openstreetmap.org/${key}" target="_blank" rel="noopener" class="pbtn" title="Ver en OSM"><span class="ico">🔍</span></a><a href="https://www.openstreetmap.org/edit?${
-    x.type
-  }=${
-    x.id
-  }" target="_blank" rel="noopener" class="pbtn" title="Editar con iD"><span class="ico">✏️</span></a><a href="${esc(
-    josmUrl(x)
-  )}" target="_blank" rel="noopener" class="pbtn" title="Editar con JOSM"><span class="ico">🧰</span></a><a href="${esc(
-    rapidUrl(x)
-  )}" target="_blank" rel="noopener" class="pbtn" title="Editar con Rapid"><span class="ico">⚡</span></a></div></div>`;
+  const osm = `https://www.openstreetmap.org/${key}`,
+    links = [
+      ["osm", "Ver en OSM", osm],
+      ["id", "Editar con iD", `https://www.openstreetmap.org/edit?editor=id&${x.type}=${x.id}`],
+      ["rapid", "Editar con Rapid", rapidUrl(x)],
+      ["level0", "Editar con Level0", `https://level0.osmz.ru/?url=${encodeURIComponent(osm)}`],
+      ["josm", "Editar con JOSM", josmUrl(x)]
+    ],
+    actions = links.map(([icon, title, url]) => `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer" class="pbtn" title="${esc(title)}" aria-label="${esc(title)}">${POPUP_ICONS[icon]}</a>`).join("");
+  return `<div class="popup-box"><div class="popup-title mono">${esc(x.tags?.name || key)}</div><div class="popup-tags">${rows}</div>${db}<div class="popup-actions">${actions}</div></div>`;
 };
 const openJOSM = (its) => {
   const ids = its.map(sid);

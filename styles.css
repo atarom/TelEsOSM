@@ -516,30 +516,31 @@ tr.group td {
 }
 .popup-actions {
   display: flex;
-  justify-content: center;
-  gap: 9px;
-  padding-top: 7px;
+  gap: 7px;
+  padding-top: 10px;
   border-top: 1px solid var(--b);
-  flex-wrap: wrap;
 }
 .pbtn {
   display: grid;
   place-items: center;
-  width: 40px;
-  aspect-ratio: 1;
-  border: 1px solid var(--a);
-  border-radius: 50%;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 38px;
+  border: 1px solid var(--b);
+  border-radius: 8px;
   background: var(--p2);
   color: var(--a);
-  transition: 0.15s;
+  transition: background 0.15s, border-color 0.15s, transform 0.15s;
 }
 .pbtn:hover {
-  background: var(--a);
+  border-color: var(--a);
+  background: #30415f;
   text-decoration: none;
-  transform: scale(1.08);
+  transform: translateY(-1px);
 }
-.ico {
-  font-size: 20px;
+.pbtn:focus-visible {
+  outline: 2px solid var(--a);
+  outline-offset: 2px;
 }
 ::-webkit-scrollbar {
   width: 9px;
