@@ -18,6 +18,8 @@ ETIQUETAS.forEach(([k, x]) => {
 });
 let modoPersonalizado = 0,
   soloValidos = 0,
+  analizando = false,
+  cierreOverlayTimer = null,
   lastRun = null,
   activeView = "validation",
   selectedFormat = null,
@@ -71,8 +73,11 @@ const ov = $("#overlay"),
     ov.hidden = 0;
     ovB.style.display = "none";
   },
-  ovClose = () => (ov.hidden = 1),
+  ovClose = () => {
+    if (!analizando) ov.hidden = 1;
+  },
   ovReset = () => {
+    clearTimeout(cierreOverlayTimer);
     ovT.textContent = "";
     ovL.innerHTML = "";
     ovB.style.display = "none";
@@ -96,7 +101,7 @@ const ov = $("#overlay"),
     ovSet(x);
     ovAdd("✅ Todo OK", "ok");
     ovOpen();
-    setTimeout(ovClose, 1200);
+    cierreOverlayTimer = setTimeout(ovClose, 1200);
   };
 const buildQ = (its) => {
   const by = { node: [], way: [], relation: [] };
@@ -544,7 +549,7 @@ const renderFromCache = () => {
         ? [{ tipo: "Válidos", items }]
         : []
       : gruposBad,
-    l = soloValidos ? v : t - v;
+    l = items.length;
   renderStats(t, v, l);
   tbody.innerHTML = "";
   openGroups.clear();
@@ -780,9 +785,13 @@ $("#modeToggle").onclick = () => {
   actualizarTester();
 };
 $("#analyze").onclick = async () => {
+  if (analizando) return;
   const tag = tagActivo(),
     zona = +$("#region").value;
   if (!zona || !tag) return alert("Selecciona región y tag");
+  analizando = true;
+  $("#analyze").disabled = true;
+  $("#ovx").hidden = true;
   ovReset();
   ovSet("Analizando");
   ovOpen();
@@ -829,13 +838,6 @@ $("#analyze").onclick = async () => {
           tags: e.tags || {}
         };
       }),
-      t = datos.reduce((a, c) => a + c.nums.length, 0),
-      v = datos.reduce(
-        (a, c) =>
-          a +
-          (!c.dups.length ? c.nums.filter((n) => !n.errs.length).length : 0),
-        0
-      ),
       bad = datos.filter(
         (x) => x.dups.length || x.nums.some((n) => n.errs.length)
       ),
@@ -843,6 +845,8 @@ $("#analyze").onclick = async () => {
         (x) =>
           x.nums.length && !x.dups.length && x.nums.every((n) => !n.errs.length)
       ),
+      t = bad.length + good.length,
+      v = good.length,
       expected = modoPersonalizado
         ? $("#customExpect").value
         : [...$("#tag").options].find((o) => o.textContent === tag)?.dataset.expect || "any",
@@ -888,10 +892,14 @@ $("#analyze").onclick = async () => {
     renderFormats(datos, areaName, tag);
     ovSet("Procesamiento completado");
     ovAdd("✅ Todo OK", "ok");
-    setTimeout(ovClose, 1200);
+    cierreOverlayTimer = setTimeout(ovClose, 1200);
   } catch (e) {
     ovAdd("Error: " + e.message, "err");
     ovErr();
+  } finally {
+    analizando = false;
+    $("#analyze").disabled = false;
+    $("#ovx").hidden = false;
   }
 };
 syncMode();
