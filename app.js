@@ -348,6 +348,9 @@ const hidePopup = () => {
     showPopup(x);
   };
 popClose.onclick = hidePopup;
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !popElement.hidden) hidePopup();
+});
 const buildGroups = (tbody, grupos) => {
   const viewport = $("#errors"),
     rowHeight = 40,
@@ -624,6 +627,7 @@ const getMapItem = (pixel) => {
 map.on("singleclick", (e) => {
   const x = getMapItem(e.pixel);
   if (x) showPopup(x);
+  else hidePopup();
 });
 map.on("pointermove", (e) => {
   if (e.dragging) return;
