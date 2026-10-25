@@ -171,7 +171,8 @@ const validarNumero = (n, tag, ctx = "osm") => {
     : [...$("#tag").options].find((o) => o.textContent === tag)?.dataset.expect || "any";
   return validarNumeroTelefonico(n, tag, ctx, exp);
 };
-const fmtWebsite = (v) =>
+const fmtValues = (v) => String(v ?? "").split(";").map((u) => esc(u.trim())).join("<br>"),
+  fmtWebsite = (v) =>
     v
       .split(";")
       .map((u) =>
@@ -181,7 +182,7 @@ const fmtWebsite = (v) =>
             )}" target="_blank" rel="noopener">${esc(u)}</a>`
           : ""
       )
-      .join("; "),
+      .join("<br>"),
   fmtPhones = (k, v) =>
     v
       .split(";")
@@ -192,7 +193,7 @@ const fmtWebsite = (v) =>
             });font-weight:900">${esc(u)}</span>`
           : ""
       )
-      .join("; "),
+      .join("<br>"),
   josmUrl = (x) =>
     "http://127.0.0.1:8111/load_object?objects=" +
     encodeURIComponent(sid(x)) +
@@ -223,7 +224,7 @@ const popupHTML = (x) => {
           isW = /website/i.test(k);
         return `<div class="popup-k">${esc(k)}</div><div class="popup-v"${
           isP || isW ? ' style="color:var(--a);font-weight:800"' : ""
-        }>${isW ? fmtWebsite(v) : isP ? fmtPhones(k, v) : esc(v)}</div>`;
+        }>${isW ? fmtWebsite(v) : isP ? fmtPhones(k, v) : fmtValues(v)}</div>`;
       })
       .join(""),
     db = x.dups?.length
