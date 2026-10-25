@@ -210,7 +210,9 @@ const POPUP_ICONS = {
   id: popupIcon('<path d="M4 20h4l11-11-4-4L4 16v4Z"/><path d="m13 7 4 4"/>'),
   rapid: popupIcon('<path d="M13 2 5 13h6l-1 9 9-12h-6l1-8Z"/>'),
   level0: popupIcon('<path d="M4.2 4.5v14.8h7.4"/><rect x="14.2" y="4.5" width="7.1" height="14.8" rx="3.5"/><circle cx="17.75" cy="11.9" r="1.15" fill="currentColor" stroke="none"/>'),
-  josm: popupIcon('<path d="M3 6 9 3l6 3 6-3v10M3 6v14l6-3 4.3 2M9 3v14M15 6v8"/><path d="m14.1 20.4 2.5-.6 4.9-5-1.9-1.9-4.9 5-.6 2.5Z"/>')
+  josm: popupIcon('<path d="M3 6 9 3l6 3 6-3v10M3 6v14l6-3 4.3 2M9 3v14M15 6v8"/><path d="m14.1 20.4 2.5-.6 4.9-5-1.9-1.9-4.9 5-.6 2.5Z"/>'),
+  clipboard: popupIcon('<rect x="5" y="5" width="14" height="16" rx="2"/><path d="M9 5.5V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1.5H9z"/><path d="M9 11h6M9 14.5h6M9 18h4"/>'),
+  overpass: popupIcon('<circle cx="12" cy="12" r="9"/><path d="M3.8 8.3 10.7 11.4Q12 12.1 13.3 11.4L20.2 8.3M12 12v9"/>')
 };
 const popupHTML = (x) => {
   const key = osmKey(x),
@@ -399,7 +401,7 @@ const buildGroups = (tbody, grupos) => {
       sep.className = "group";
       sep.dataset.g = index;
       sep.dataset.open = open ? "1" : "0";
-      sep.innerHTML = `<td colspan="2"><div class="gbar"><button class="btn-toggle" type="button" aria-label="${open ? "Plegar" : "Desplegar"} grupo" aria-expanded="${open}">${open ? "▼" : "▶"}</button><span class="gtitle" title="${esc(group.tipo)}">${esc(group.tipo)}</span><span class="gcount">${group.items.length}</span><div class="actions"><button class="btn-clip" title="Copiar Overpass">📋</button><button class="btn-ot" title="Abrir en Overpass Turbo">🧭</button><button class="btn-josm" title="Cargar grupo en JOSM">🧰</button></div></div></td>`;
+      sep.innerHTML = `<td colspan="2"><div class="gbar"><button class="btn-toggle" type="button" aria-label="${open ? "Plegar" : "Desplegar"} grupo" aria-expanded="${open}">${open ? "▼" : "▶"}</button><span class="gtitle" title="${esc(group.tipo)}">${esc(group.tipo)}</span><span class="gcount">${group.items.length}</span><div class="actions"><button class="btn-clip" type="button" title="Copiar Overpass" aria-label="Copiar Overpass">${POPUP_ICONS.clipboard}</button><button class="btn-ot" type="button" title="Abrir en Overpass Turbo" aria-label="Abrir en Overpass Turbo">${POPUP_ICONS.overpass}</button><button class="btn-josm" type="button" title="Cargar grupo en JOSM" aria-label="Cargar grupo en JOSM">${POPUP_ICONS.josm}</button></div></div></td>`;
       sep.onclick = () => visibilityAt(index);
       sep.querySelector(".btn-clip").onclick = (e) => {
         e.stopPropagation();

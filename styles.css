@@ -312,6 +312,25 @@ tr.group td {
   border-radius: 7px;
   color: var(--a);
 }
+.actions button {
+  display: grid;
+  place-items: center;
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  background: var(--p2);
+  border-color: var(--b);
+}
+.actions button svg {
+  display: block;
+  width: 22px;
+  height: 22px;
+}
+.actions button:focus-visible {
+  outline: 2px solid var(--a);
+  outline-offset: 2px;
+}
 .ov[hidden] {
   display: none !important;
 }
